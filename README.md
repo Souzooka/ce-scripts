@@ -1,0 +1,3 @@
+This repository contains Cheat Engine Assemblies (default hotkey to open script window in CE: Ctrl+Alt+A) which demonstrate accessing data which may be helpful for RetroAchievements achievement sets, but the means for which are currently impossible for current tooling.
+
+These scripts are (for PS2 at least) written using the emurpm plugin (can be found in Cheat Engine's Github repository), and the base memory address set to [eemem], which allows just using PS2 addresses directly.

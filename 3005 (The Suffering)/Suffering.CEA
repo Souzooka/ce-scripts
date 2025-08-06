@@ -1,0 +1,152 @@
+{$lua}
+
+nullptr = 0
+
+function ptr(base, offsets, accessor)
+  local val = readInteger(base)
+  for i=1,#offsets do
+    if i == #offsets then
+      val = accessor(val + offsets[i])
+    else
+      val = readInteger(val + offsets[i])
+    end
+  end
+
+  return val
+end
+
+function readUnicodeString(addr)
+  return readString(addr, 6000, true)
+end
+
+function findLinkedListNode(objectID)
+  local offset = ((objectID * 0x59) & 0xFF) << 2
+  local node = readInteger(0x4DB914 + offset)
+
+  while node ~= nullptr do
+    -- Check object ID stored on node to see if it matches
+    if readInteger(node + 0x0) == objectID then
+       return node
+    end
+
+    -- Read next
+    node = readInteger(node + 0x14)
+  end
+
+  -- Object does not exist
+  return nil
+end
+
+function printInventoryStats()
+  -- 32DD50 (base), 2478F8 (offsets)
+  local inv = ptr(0x482A14, {0x44, 0x18}, readInteger)
+
+  -- 4 slot inventory?
+  for category_slot=0,3 do
+      local addr = inv + 0x68 + (category_slot * 4)
+      local num_items = ptr(addr, {0x6C}, readInteger) -- 00263070
+      print("")
+      print(string.format("Category slot %d num items?: %d", category_slot, num_items))
+      for item_slot=0,num_items-1 do
+        local id = readItemID(inv, category_slot, item_slot)
+        print(string.format("Item slot %d ID: 0x%08X", item_slot, id))
+        local name = ptr(findLinkedListNode(id) + 0x1C, {0x0}, readUnicodeString)
+        name = name:match( "^%s*(.-)%s*$" ) -- trim trailing newlines off some item names
+        print(string.format("Item slot %d Name: %s", item_slot, name))
+      end
+  end
+end
+
+function readItemID(inv, category_slot, item_slot)
+  -- 25F20C
+  local addr = readInteger(inv + 0x68 + (category_slot * 4))
+
+  -- 2630F4
+  --local item_slot = readInteger(addr + 0x74) << 2
+  addr = readInteger(addr + 0x64)
+  addr = readInteger(addr + (item_slot * 4))
+
+  -- 261410
+  local a0 = readInteger(addr + 0x74)
+  -- 26142C
+  local v0 = a0
+  a0 = a0 & 0x3FF
+
+  v0 = v0 >> 10 -- 261440
+  v0 = v0 << 2 -- 26144C
+
+  local a2 = readInteger(0x46FB3C) -- 261418
+  local a1 = readInteger(a2 + 0x14) -- 261434
+  a1 = a1 * a0 -- 261448
+
+  local v1 = readInteger(a2 + 0x0) -- 261444
+  v1 = v1 + v0 -- 261450
+
+  a0 = readInteger(v1 + 0x0) -- 261454
+  local s0 = a0 + a1
+
+  addr = readInteger(s0 + 0x0) -- 261458
+  addr = readInteger(addr + 0x4) -- 261530
+
+  -- 0x17 hardcoded (261534) multiplied by 4 (1AE9F4) then dereferenced (261550)
+  local item_id = readInteger(addr + 0x5C)
+  return item_id
+end
+
+
+[ENABLE]
+--code from here to '[DISABLE]' will be used to enable the cheat
+
+printInventoryStats()
+--[[
+Example output from the above function call (called after picking up Flashlight):
+
+Category slot 0 num items?: 1
+Item slot 0 ID: 0x00040010
+Item slot 0 Name: Shiv
+
+Category slot 1 num items?: 0
+
+Category slot 2 num items?: 2
+Item slot 0 ID: 0x00040042
+Item slot 0 Name: Urgent Note
+Item slot 1 ID: 0x0004002E
+Item slot 1 Name: Photo
+
+Category slot 3 num items?: 1
+Item slot 0 ID: 0x00040001
+Item slot 0 Name: Flashlight
+--]]
+
+--[[
+print("Naive:")
+print(ptr(0x4DBD14, {0x1C, 0x0}, readUnicodeString))
+
+print("Linked list lookup:")
+ID_Photo = 0x4002E
+node = findLinkedListNode(ID_Photo)
+if node then
+   print(string.format("Node address: 0x%08X", node))
+   name = ptr(node + 0x1C, {0x0}, readUnicodeString)
+   print(string.format("Object name: %s", name))
+end
+
+ID_Shiv = 0x40010
+node = findLinkedListNode(ID_Shiv)
+if node then
+   print(string.format("Node address: 0x%08X", node))
+   name = ptr(node + 0x1C, {0x0}, readUnicodeString)
+   print(string.format("Object name: %s", name))
+end
+
+ID_Flashlight = 0x40001
+node = findLinkedListNode(ID_Flashlight)
+if node then
+   print(string.format("Node address: 0x%08X", node))
+   name = ptr(node + 0x1C, {0x0}, readUnicodeString)
+   print(string.format("Object name: %s", name))
+end
+--]]
+
+[DISABLE]
+--code from here till the end of the code will be used to disable the cheat
