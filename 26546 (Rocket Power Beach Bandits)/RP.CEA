@@ -1,0 +1,154 @@
+{$lua}
+
+nullptr = 0
+theDBaseManager = readInteger(0x3D20E4)
+
+-- 00153680
+function LockF(p_mutex)
+ for sanity=1000,0,-1 do
+    if readInteger(p_mutex) == 0 then
+       break
+    end
+    sanity = sanity - 1
+
+    if sanity == 0 then
+      error("LockF - COULDN'T ACQUIRE MUTEX")
+    end
+  end
+
+  writeInteger(p_mutex, 0x1FFFF)
+end
+
+-- 00153748
+function UnlockF(p_mutex)
+  writeInteger(p_mutex, 0)
+end
+
+-- 0013A320
+function DBase__GetValue(dbase, db_key, key, value, accessor)
+  -- DBase is basically a linked list, of linked lists.
+  -- The outer linked list is accessed via db_key provided
+  -- by doing a basic strcasecmp with a string stored on the
+  -- linked list node. The inner linked list is then accessed
+  -- via the matched node in the outer linked list, and then
+  -- the node containing the string matching the key is matched.
+  -- For both of these steps, the game moves the accessed nodes to
+  -- the front of each list.
+
+  if dbase == nullptr then
+    error("DBase__GetValue - NO DBASE")
+  end
+
+  local p_mutex = dbase + 0x104
+
+  -- woah cool mutex lock
+  LockF(p_mutex)
+
+  -- match db_key
+  local last_db_entry = nullptr
+  local db_entry = readInteger(dbase + 0x0)
+  while db_entry ~= nullptr do
+    if readString(readInteger(db_entry + 0x0)) == db_key then
+       break
+    end
+
+    last_db_entry = db_entry
+    db_entry = readInteger(db_entry + 0x10)
+  end
+
+  if db_entry == nullptr then
+     UnlockF(p_mutex)
+     return
+  end
+
+  -- Game bubbles up most recently accessed category to front of linked list
+  --[[
+  if last_db_entry ~= nullptr then
+     writeInteger(last_db_entry + 0x10, readInteger(db_entry + 0x10))
+     writeInteger(db_entry + 0x10, readInteger(dbase + 0x0))
+     writeInteger(dbase + 0x0, db_entry)
+  end
+  --]]
+
+  local is_bin = readInteger(db_entry + 0x8)
+  if is_bin ~= 0 then
+     DBase__GetBinValue(dbase, db_key, key, value, accessor)
+     UnlockF(p_mutex)
+     return
+  end
+
+  -- match key
+
+  local last_entry = nullptr
+  local entry = readInteger(db_entry + 0xC)
+  while entry ~= nullptr do
+    if readString(readInteger(entry + 0x1C)) == key then
+      break
+    end
+
+    last_entry = entry
+    entry = readInteger(entry + 0x14)
+  end
+
+  if entry == nullptr then
+     UnlockF(p_mutex)
+     return
+  end
+
+  -- Game bubbles up most recently accessed category to front of linked list
+  --[[
+  if last_entry ~= nullptr then
+     writeInteger(last_entry + 0x14, readInteger(entry + 0x14))
+     writeInteger(entry + 0x14, readInteger(db_entry + 0xC))
+     writeInteger(db_entry + 0xC, entry)
+  end
+  --]]
+
+  value[1] = accessor(entry + 0x8)
+
+  -- woah cool mutex unlock
+  UnlockF(p_mutex)
+end
+
+-- 0013B660
+function DBase__GetBinValue(dbase, db_key, key, value, accessor)
+  error("DBase__GetBinValue - NOT IMPLEMENTED")
+end
+
+[ENABLE]
+-- code from here to '[DISABLE]' will be used to enable the cheat
+
+
+-- NOTE: Keys aren't added to the database until they become relevant
+-- e.g. "gold_rocket_tokens" doesn't exist until earning at least 1,
+-- nor do the specific gold token keys exist.
+value = {}
+DBase__GetValue(
+  theDBaseManager,
+  "AwarenessCanExist",
+  "gold_rocket_tokens",
+  value,
+  readInteger
+)
+print("Number of Gold Rocket Tokens obtained: ", value[1] or 0)
+
+value = {}
+DBase__GetValue(
+  theDBaseManager,
+  "AwarenessCanExist",
+  "OSPhase1\\O11_OttoVsPi\\Got_Gold_Tokens",
+  value,
+  readInteger
+)
+max_value = {}
+DBase__GetValue(
+  theDBaseManager,
+  "AwarenessCanExist",
+  "OSPhase1\\O11_OttoVsPi\\Max_Gold_Tokens",
+  max_value,
+  readInteger
+)
+print("Obtained Gold Rocket Token in Otto vs. Pi match?: ", value[1] or 0, "/", max_value[1] or 0)
+ 
+[DISABLE]
+-- code from here till the end of the code will be used to disable the cheat
