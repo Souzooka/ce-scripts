@@ -1,0 +1,199 @@
+{$lua}
+
+nullptr = 0
+
+-- 00337F00
+function DictGetBool(dict, key, value)
+  return _SubDictGet(dict, key, value, _ReadDictBool)
+end
+
+-- 00337F20
+function DictGetInt(dict, key, value)
+  return _SubDictGet(dict + 0x30, key, value, _ReadDictInt)
+end
+
+-- 00337F40
+function DictGetChar(dict, key, value)
+  return _SubDictGet(dict + 0x60, key, value, _ReadDictChar)
+end
+
+function _ReadDictBool(dict, node)
+  -- 3387B4 (original code reads 32-bit blocks, here we just read a byte)
+  local index = readInteger(node + 0x0)
+  local offset = index // 8
+  local v = readByte(readInteger(dict + 0x24) + offset)
+  v = v & (1 << (index % 8))
+  v = v >> (index % 8)
+  return v
+end
+
+function _ReadDictInt(dict, node)
+  local offset = readInteger(node + 0x0) << 2
+  return readInteger(readInteger(dict + 0x24) + offset)
+end
+
+function _ReadDictChar(dict, node)
+  local offset = readInteger(node + 0x0)
+  return readByte(readInteger(dict + 0x24) + offset)
+end
+
+function _SubDictGet(dict, key, value, accessor)
+  if readInteger(dict + 0x4) == 0 then
+    return
+  end
+
+  local hash = _DictHashKey(key)
+  if hash == nil then
+    return
+  end
+
+  local capacity = readInteger(dict + 0x8)
+  local hash = hash % capacity
+  local buckets = readInteger(dict + 0x0)
+  local list = readInteger(buckets + (hash * 4))
+
+  local node = list
+  while node ~= nullptr do
+    if key == readString(readInteger(node + 0x4)) then
+      break
+    end
+    node = readInteger(node + 0x14)
+  end
+
+  if node == nullptr then
+     return
+  end
+
+  if readInteger(dict + 0x20) < readInteger(node + 0x0) then
+     return
+  end
+
+  value[1] = accessor(dict, node)
+
+end
+
+function _DictHashKey(key)
+ if key == nil or key == '' then
+    return nil
+ end
+
+ -- lmao their hash function is completely broken
+ return string.byte(string.sub(key, #key, #key)) << ((#key - 1) & 3)
+end
+
+function PrintDictionary(dict)
+  print("Dictionary:")
+
+  print("Boolean keys/values:")
+  local sdict = dict + 0x0
+  local capacity = readInteger(sdict + 0x8)
+  local buckets = readInteger(sdict + 0x0)
+  local keys = {}
+
+  for i=0,capacity-1,1 do
+    local list = readInteger(buckets + i * 4)
+    while list ~= nullptr do
+      local key = readString(readInteger(list + 0x4))
+      table.insert(keys, key)
+      list = readInteger(list + 0x14)
+    end
+  end
+
+  table.sort(keys)
+
+  for i=1,#keys,1 do
+      local value = {}
+
+      DictGetBool(dict, keys[i], value)
+      value = value[1]
+      print(string.format("{\"%s\": %d}", keys[i], value))
+  end
+
+  print("\n")
+  print("Integer keys/values:")
+  sdict = dict + 0x30
+  capacity = readInteger(sdict + 0x8)
+  buckets = readInteger(sdict + 0x0)
+  keys = {}
+
+  for i=0,capacity-1,1 do
+    local list = readInteger(buckets + i * 4)
+    while list ~= nullptr do
+      local key = readString(readInteger(list + 0x4))
+      table.insert(keys, key)
+      list = readInteger(list + 0x14)
+    end
+  end
+
+  table.sort(keys)
+
+  for i=1,#keys,1 do
+      local value = {}
+
+      DictGetInt(dict, keys[i], value)
+      value = value[1]
+      print(string.format("{\"%s\": %d}", keys[i], value))
+  end
+
+  print("\n")
+  print("Char keys/values:")
+  sdict = dict + 0x60
+  capacity = readInteger(sdict + 0x8)
+  buckets = readInteger(sdict + 0x0)
+  keys = {}
+
+  for i=0,capacity-1,1 do
+    local list = readInteger(buckets + i * 4)
+    while list ~= nullptr do
+      local key = readString(readInteger(list + 0x4))
+      table.insert(keys, key)
+      list = readInteger(list + 0x14)
+    end
+  end
+
+  table.sort(keys)
+
+  for i=1,#keys,1 do
+      local value = {}
+
+      DictGetChar(dict, keys[i], value)
+      value = value[1]
+      print(string.format("{\"%s\": %d}", keys[i], value))
+  end
+end
+
+[ENABLE]
+-- code from here to '[DISABLE]' will be used to enable the cheat
+
+print("")
+print("-------------------------")
+print("")
+print("Dictionary 0x637560:")
+print("")
+dict = readInteger(0x637560)
+PrintDictionary(dict)
+print("")
+print("-------------------------")
+print("")
+print("Dictionary 0x637564:")
+print("")
+dict = readInteger(0x637564)
+PrintDictionary(dict)
+print("")
+print("-------------------------")
+print("")
+print("Dictionary 0x637568:")
+print("")
+dict = readInteger(0x637568)
+PrintDictionary(dict)
+print("")
+print("-------------------------")
+print("")
+print("Dictionary 0x63756C:")
+print("")
+dict = readInteger(0x63756C)
+PrintDictionary(dict)
+
+[DISABLE]
+-- code from here till the end of the code will be used to disable the cheat
+
